@@ -30,6 +30,10 @@
     select,input[type=number] { width:100%; min-height:38px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--field); color:var(--text); }
     .checks { display:grid; gap:9px; margin-top:16px; }
     .checks label { display:flex; gap:8px; align-items:center; color:var(--text); }
+    .checks label.sf2-option { margin:0 0 3px; padding:10px 12px; border:1px solid #65485a; border-radius:8px; background:#ff5aa10d; font-weight:600; }
+    .checks label.sf2-option input { flex:0 0 auto; }
+    .sf2-option span { display:grid; gap:2px; }
+    .sf2-option small { color:var(--muted); font-size:11px; font-weight:400; }
     input[type=checkbox] { accent-color:#c3348c; width:16px; height:16px; margin:0; }
     .hint { margin:12px 0 0; font-size:12px; }
     .files { max-height:190px; overflow:auto; margin:10px 0 0; padding:0; list-style:none; color:var(--muted); font-size:12px; }
@@ -74,11 +78,11 @@
       <label class="field">Gap between notes (sec)<input id="gap" type="number" min="0" max="5" step="0.05" value="0.30"></label>
     </div>
     <div class="checks">
+      <label class="sf2-option"><input id="sf2" type="checkbox"><span>Also create an SF2 instrument for FL Studio Mobile<small>Check this before generating to download a ZIP with the WAV and SF2.</small></span></label>
       <label><input id="pitch" type="checkbox" checked> Apply pitch transformation</label>
       <label><input id="normalize" type="checkbox" checked> Peak-normalize each sample</label>
       <label><input id="randomize" type="checkbox"> Randomize sample selection</label>
       <label><input id="dump" type="checkbox"> Include individual pitched WAVs</label>
-      <label><input id="sf2" type="checkbox"> Also create an SF2 instrument for FL Studio Mobile</label>
       <label><input id="slicex" type="checkbox"> Embed Slicex markers</label>
     </div>
     <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine. SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player.</p>
@@ -154,7 +158,8 @@
       $('status').className = 'error'; return;
     }
     const startingMidi = (Number($('octave').value) + 1) * 12 + Number($('note').value);
-    if ($('sf2').checked && startingMidi + range - 1 > 127) {
+    const sf2Requested = $('sf2').checked;
+    if (sf2Requested && startingMidi + range - 1 > 127) {
       $('status').textContent = 'The selected SF2 note range must fit within MIDI notes 0–127.';
       $('status').className = 'error'; return;
     }
@@ -164,9 +169,9 @@
     form.append('start_note_index', $('note').value); form.append('start_octave', $('octave').value);
     form.append('pitched', String($('pitch').checked)); form.append('normalize', String($('normalize').checked));
     form.append('randomize', String($('randomize').checked)); form.append('dump_samples', String($('dump').checked));
-    form.append('create_sf2', String($('sf2').checked));
+    form.append('create_sf2', String(sf2Requested));
     form.append('slicex_markers', String($('slicex').checked));
-    $('generate').disabled = true; $('clear').disabled = true; $('progress').hidden = false;
+    $('generate').disabled = true; $('clear').disabled = true; $('sf2').disabled = true; $('progress').hidden = false;
     $('progress').removeAttribute('value'); $('status').className = '';
     $('status').textContent = remoteEngineConfigured
       ? 'Sending samples over HTTPS to your Ubuntu audio service for processing…'
@@ -176,15 +181,16 @@
       const response = await fetch(`${apiBase}/api/generate`, {method:'POST', body:form});
       if (!response.ok) throw new Error(await response.text());
       const blob = await response.blob(), isZip = response.headers.get('Content-Type')?.includes('zip');
+      if (sf2Requested && !isZip) throw new Error('The audio service returned a WAV instead of the requested SF2 ZIP. Please try again; if it continues, the server may need its SF2 update.');
       if (resultUrl) URL.revokeObjectURL(resultUrl);
       resultUrl = URL.createObjectURL(blob); $('preview').src = isZip ? '' : resultUrl; $('preview').hidden = isZip; $('download').href = resultUrl;
       $('download').download = isZip
-        ? ($('sf2').checked ? 'chromatic_and_sf2.zip' : 'chromatic_with_pitched_samples.zip')
+        ? (sf2Requested ? 'chromatic_and_sf2.zip' : 'chromatic_with_pitched_samples.zip')
         : 'chromatic.wav';
       $('download').textContent = isZip
-        ? ($('sf2').checked ? 'Download chromatic WAV and SF2' : 'Download WAV and pitched samples')
+        ? (sf2Requested ? 'Download chromatic WAV and SF2 ZIP' : 'Download WAV and pitched samples')
         : 'Download chromatic.wav';
-      $('details').textContent = $('sf2').checked
+      $('details').textContent = sf2Requested && isZip
         ? 'The ZIP contains chromatic.wav and chromatic.sf2. In FL Studio Mobile 4.10+, add SoundFont Player and load the SF2 bank.'
         : isZip ? 'The ZIP includes chromatic.wav and the individual pitched WAV samples.' : `${range} semitones · Praat/Parselmouth-generated WAV`;
       $('result').style.display = 'block'; $('status').textContent = 'Done. Preview the result or download it.';
@@ -196,7 +202,7 @@
       $('status').className = 'error';
     } finally {
       $('progress').hidden = true; $('progress').setAttribute('value','0');
-      $('generate').disabled = !files.length || !engineReady; $('clear').disabled = !files.length;
+      $('generate').disabled = !files.length || !engineReady; $('clear').disabled = !files.length; $('sf2').disabled = false;
     }
   });
 })();
