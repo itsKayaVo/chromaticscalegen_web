@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#121212">
-    <link rel="icon" href="./favicon.ico" sizes="any">
+  <link rel="icon" href="./favicon.ico" sizes="any">
   <title>Chromatic Scale Generator</title>
   <style>
     :root { color-scheme:dark; --bg:#121212; --panel:#1a1a1a; --field:#222; --line:#2f2f2f; --muted:#9a9a9a; --sub:#d6b2c8; --text:#f4f1f6; --accent:#ff5aa1; --accent-hover:#ff9ac0; --danger:#ffc2d6; }
@@ -35,6 +35,7 @@
     .files { max-height:190px; overflow:auto; margin:10px 0 0; padding:0; list-style:none; color:var(--muted); font-size:12px; }
     .files li { display:flex; justify-content:space-between; gap:12px; padding:5px 2px; border-bottom:1px solid #ffffff0c; }
     .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    #result audio[hidden] { display:none; }
     button,.download { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 14px; border:1px solid transparent; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; text-decoration:none; cursor:pointer; }
     button:hover,.download:hover { background:var(--accent-hover); }
     button.secondary,.download.secondary { border-color:var(--line); background:#262626; color:var(--text); }
@@ -77,9 +78,10 @@
       <label><input id="normalize" type="checkbox" checked> Peak-normalize each sample</label>
       <label><input id="randomize" type="checkbox"> Randomize sample selection</label>
       <label><input id="dump" type="checkbox"> Include individual pitched WAVs</label>
+      <label><input id="sf2" type="checkbox"> Also create an SF2 instrument for FL Studio Mobile</label>
       <label><input id="slicex" type="checkbox"> Embed Slicex markers</label>
     </div>
-    <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine.</p>
+    <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine. SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player.</p>
   </section>
   <section class="card">
     <h2>Run</h2>
@@ -109,9 +111,10 @@
   const engineHelp = location.protocol === 'file:'
     ? 'Start the local browser service with Start Browser Generator.command, or open the deployed HTTPS site.'
     : 'The audio service is not configured. Set CSGPR_API_BASE in generator-config.js to your Ubuntu server’s HTTPS URL.';
-  $('processingNote').textContent = remoteEngineConfigured
+  $('processingNote').textContent = (remoteEngineConfigured
     ? 'Audio samples are sent over HTTPS to your configured Ubuntu server for processing.'
-    : 'Audio is processed locally using the original Praat/Parselmouth engine.';
+    : 'Audio is processed locally using the original Praat/Parselmouth engine.')
+    + ' SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player.';
   if (remoteEngineConfigured) {
     $('footerNote').textContent = 'Audio processing is provided by the configured Ubuntu server.';
   }
@@ -150,12 +153,18 @@
       $('status').textContent = 'Choose a range of 1–128 semitones and a gap of 0–5 seconds.';
       $('status').className = 'error'; return;
     }
+    const startingMidi = (Number($('octave').value) + 1) * 12 + Number($('note').value);
+    if ($('sf2').checked && startingMidi + range - 1 > 127) {
+      $('status').textContent = 'The selected SF2 note range must fit within MIDI notes 0–127.';
+      $('status').className = 'error'; return;
+    }
     const form = new FormData();
     for (const file of files) form.append('samples', file, file.name);
     form.append('semitones', String(range)); form.append('gap_seconds', String(gap));
     form.append('start_note_index', $('note').value); form.append('start_octave', $('octave').value);
     form.append('pitched', String($('pitch').checked)); form.append('normalize', String($('normalize').checked));
     form.append('randomize', String($('randomize').checked)); form.append('dump_samples', String($('dump').checked));
+    form.append('create_sf2', String($('sf2').checked));
     form.append('slicex_markers', String($('slicex').checked));
     $('generate').disabled = true; $('clear').disabled = true; $('progress').hidden = false;
     $('progress').removeAttribute('value'); $('status').className = '';
@@ -168,10 +177,16 @@
       if (!response.ok) throw new Error(await response.text());
       const blob = await response.blob(), isZip = response.headers.get('Content-Type')?.includes('zip');
       if (resultUrl) URL.revokeObjectURL(resultUrl);
-      resultUrl = URL.createObjectURL(blob); $('preview').src = resultUrl; $('download').href = resultUrl;
-      $('download').download = isZip ? 'chromatic_with_pitched_samples.zip' : 'chromatic.wav';
-      $('download').textContent = isZip ? 'Download WAV and pitched samples' : 'Download chromatic.wav';
-      $('details').textContent = isZip ? 'The ZIP includes chromatic.wav and the individual pitched WAV samples.' : `${range} semitones · Praat/Parselmouth-generated WAV`;
+      resultUrl = URL.createObjectURL(blob); $('preview').src = isZip ? '' : resultUrl; $('preview').hidden = isZip; $('download').href = resultUrl;
+      $('download').download = isZip
+        ? ($('sf2').checked ? 'chromatic_and_sf2.zip' : 'chromatic_with_pitched_samples.zip')
+        : 'chromatic.wav';
+      $('download').textContent = isZip
+        ? ($('sf2').checked ? 'Download chromatic WAV and SF2' : 'Download WAV and pitched samples')
+        : 'Download chromatic.wav';
+      $('details').textContent = $('sf2').checked
+        ? 'The ZIP contains chromatic.wav and chromatic.sf2. In FL Studio Mobile 4.10+, add SoundFont Player and load the SF2 bank.'
+        : isZip ? 'The ZIP includes chromatic.wav and the individual pitched WAV samples.' : `${range} semitones · Praat/Parselmouth-generated WAV`;
       $('result').style.display = 'block'; $('status').textContent = 'Done. Preview the result or download it.';
     } catch (error) {
       const service = remoteEngineConfigured
