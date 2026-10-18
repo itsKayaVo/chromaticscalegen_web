@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#121212">
+  <title>Chromatic Scale Generator</title>
+  <style>
+    :root { color-scheme:dark; --bg:#121212; --panel:#1a1a1a; --field:#222; --line:#2f2f2f; --muted:#9a9a9a; --sub:#d6b2c8; --text:#f4f1f6; --accent:#ff5aa1; --accent-hover:#ff9ac0; --danger:#ffc2d6; }
+    * { box-sizing:border-box; }
+    body { margin:0; min-height:100vh; background:var(--bg); color:var(--text); font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { width:min(1500px,calc(100% - 36px)); margin:20px auto 30px; }
+    header { margin:0 0 14px; }
+    .eyebrow { color:var(--sub); font-size:12px; font-weight:600; }
+    h1 { margin:2px 0 0; font-size:22px; line-height:1.25; font-weight:600; }
+    header p,.hint { color:var(--muted); }
+    header p { margin:4px 0 0; font-size:13px; }
+    .layout { display:grid; grid-template-columns:minmax(0,1.2fr) minmax(380px,1fr); gap:16px; align-items:stretch; }
+    .card { min-width:0; padding:18px; background:var(--panel); border:1px solid var(--line); border-radius:10px; }
+    .card h2 { margin:0 0 16px; color:var(--sub); font-size:17px; font-weight:600; }
+    .drop { display:grid; place-items:center; min-height:88px; padding:12px; border:1px dashed #484848; border-radius:8px; text-align:center; transition:border-color .15s ease; }
+    .drop.over { border-color:var(--accent); background:#ff5aa10a; }
+    .drop strong { display:inline; font-size:14px; font-weight:600; }
+    .drop .hint { display:block; margin-top:2px; font-size:12px; }
+    input,button { font:inherit; }
+    input[type=file] { max-width:100%; margin-top:8px; color:var(--muted); font-size:12px; }
+    .grid { display:grid; grid-template-columns:repeat(2,minmax(140px,1fr)); gap:12px 16px; margin-top:16px; }
+    label.field { display:grid; gap:5px; color:var(--text); font-size:13px; font-weight:500; }
+    select,input[type=number] { width:100%; min-height:38px; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--field); color:var(--text); }
+    .checks { display:grid; gap:9px; margin-top:16px; }
+    .checks label { display:flex; gap:8px; align-items:center; color:var(--text); }
+    input[type=checkbox] { accent-color:#c3348c; width:16px; height:16px; margin:0; }
+    .hint { margin:12px 0 0; font-size:12px; }
+    .files { max-height:190px; overflow:auto; margin:10px 0 0; padding:0; list-style:none; color:var(--muted); font-size:12px; }
+    .files li { display:flex; justify-content:space-between; gap:12px; padding:5px 2px; border-bottom:1px solid #ffffff0c; }
+    .actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    button,.download { display:inline-flex; align-items:center; justify-content:center; min-height:38px; padding:8px 14px; border:1px solid transparent; border-radius:8px; background:var(--accent); color:#fff; font-weight:600; text-decoration:none; cursor:pointer; }
+    button:hover,.download:hover { background:var(--accent-hover); }
+    button.secondary,.download.secondary { border-color:var(--line); background:#262626; color:var(--text); }
+    button:disabled { opacity:.45; cursor:not-allowed; }
+    progress { width:100%; height:18px; margin:12px 0 10px; accent-color:var(--accent); }
+    #status { min-height:250px; margin:0; padding:12px; overflow:auto; white-space:pre-wrap; border:1px solid var(--line); border-radius:8px; background:var(--field); color:var(--muted); }
+    #status.error { color:var(--danger); }
+    #result { display:none; margin-top:14px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#202020; }
+    #result audio { display:block; width:100%; margin:10px 0; }
+    .small { font-size:12px; color:var(--muted); }
+    footer { margin-top:14px; color:var(--sub); font-size:12px; }
+    @media(max-width:850px) { .layout{grid-template-columns:1fr} #status{min-height:160px} }
+    @media(max-width:520px) { main{width:calc(100% - 22px);margin-top:12px}.grid{grid-template-columns:1fr 1fr}.card{padding:14px} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Chromatic Scale Generator · Browser Edition</div>
+    <h1>Chromatic Scale Generator Plus Remastered</h1>
+    <p>Browser edition · uses the same Praat/Parselmouth worker as the desktop app.</p>
+  </header>
+  <div class="layout">
+  <section class="card">
+    <h2>Configuration</h2>
+    <div id="drop" class="drop">
+      <div><strong>Drop WAV samples here</strong><span class="hint">or choose multiple WAV files. They are sorted by filename and cycled through in order.</span><br>
+        <input id="filesInput" type="file" accept="audio/wav,.wav" multiple>
+      </div>
+    </div>
+    <ul id="fileList" class="files"></ul>
+    <div class="grid">
+      <label class="field">Starting note<select id="note"></select></label>
+      <label class="field">Starting octave<select id="octave"></select></label>
+      <label class="field">Semitone range<input id="range" type="number" min="1" max="128" value="24"></label>
+      <label class="field">Gap between notes (sec)<input id="gap" type="number" min="0" max="5" step="0.05" value="0.30"></label>
+    </div>
+    <div class="checks">
+      <label><input id="pitch" type="checkbox" checked> Apply pitch transformation</label>
+      <label><input id="normalize" type="checkbox" checked> Peak-normalize each sample</label>
+      <label><input id="randomize" type="checkbox"> Randomize sample selection</label>
+      <label><input id="dump" type="checkbox"> Include individual pitched WAVs</label>
+      <label><input id="slicex" type="checkbox"> Embed Slicex markers</label>
+    </div>
+    <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine.</p>
+  </section>
+  <section class="card">
+    <h2>Run</h2>
+    <div class="actions" style="margin-top:0"><button id="generate" disabled>Generate Chromatic</button><button id="clear" class="secondary" disabled>Clear samples</button></div>
+    <progress id="progress" max="100" value="0" hidden></progress>
+    <p id="status" role="status" aria-live="polite">Start the local browser generator, then add WAV files.</p>
+    <section id="result">
+      <strong>Chromatic scale ready</strong>
+      <audio id="preview" controls></audio>
+      <div class="actions"><a id="download" class="download" download="chromatic.wav">Download result</a></div>
+      <p id="details" class="small"></p>
+    </section>
+  </section>
+  </div>
+  <footer id="footerNote">To start the local audio service, double-click <code>Start Browser Generator.command</code>. Stop it from its Terminal window with Control-C.</footer>
+</main>
+<script src="generator-config.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const noteNames = ['C','C♯','D','D♯','E','F','F♯','G','G♯','A','A♯','B'];
+  const input = $('filesInput'), drop = $('drop'), list = $('fileList');
+  const servedByLocalEngine = location.protocol === 'http:' && location.hostname === '127.0.0.1' && location.port === '8765';
+  const apiBase = String(window.CSGPR_API_BASE || '').trim().replace(/\/+$/, '');
+  const remoteEngineConfigured = /^https:\/\//i.test(apiBase) && !apiBase.includes('YOUR-SERVER');
+  const engineReady = servedByLocalEngine || remoteEngineConfigured;
+  const engineHelp = location.protocol === 'file:'
+    ? 'Start the local browser service with Start Browser Generator.command, or open the deployed HTTPS site.'
+    : 'The audio service is not configured. Set CSGPR_API_BASE in generator-config.js to your Ubuntu server’s HTTPS URL.';
+  $('processingNote').textContent = remoteEngineConfigured
+    ? 'Audio samples are sent over HTTPS to your configured Ubuntu server for processing.'
+    : 'Audio is processed locally using the original Praat/Parselmouth engine.';
+  if (remoteEngineConfigured) {
+    $('footerNote').textContent = 'Audio processing is provided by the configured Ubuntu server.';
+  }
+  let files = [], resultUrl = null;
+  noteNames.forEach((name, i) => $('note').add(new Option(name, String(i))));
+  for (let octave = 1; octave <= 8; octave++) $('octave').add(new Option(String(octave), String(octave)));
+  $('octave').value = '3';
+
+  function setFiles(selected) {
+    files = [...selected].filter(file => /\.wav$/i.test(file.name)).sort((a,b) => a.name.localeCompare(b.name, undefined, {numeric:true, sensitivity:'base'}));
+    list.replaceChildren();
+    files.forEach((file, i) => {
+      const row = document.createElement('li'), name = document.createElement('span'), size = document.createElement('span');
+      name.textContent = `${i + 1}. ${file.name}`; size.textContent = `${(file.size / 1048576).toFixed(1)} MB`;
+      row.append(name, size); list.append(row);
+    });
+    $('generate').disabled = !files.length || !engineReady; $('clear').disabled = !files.length;
+    $('status').textContent = !engineReady ? engineHelp : files.length ? `${files.length} WAV sample${files.length === 1 ? '' : 's'} loaded.` : 'Add WAV files to begin.';
+    $('status').className = ''; $('result').style.display = 'none';
+  }
+  input.addEventListener('change', () => setFiles(input.files));
+  if (!engineReady) $('status').textContent = engineHelp;
+  $('clear').addEventListener('click', () => { input.value = ''; setFiles([]); });
+  for (const eventName of ['dragenter','dragover']) drop.addEventListener(eventName, event => { event.preventDefault(); drop.classList.add('over'); });
+  for (const eventName of ['dragleave','drop']) drop.addEventListener(eventName, event => { event.preventDefault(); drop.classList.remove('over'); });
+  drop.addEventListener('drop', event => setFiles(event.dataTransfer.files));
+
+  $('generate').addEventListener('click', async () => {
+    if (!engineReady) {
+      $('status').textContent = engineHelp;
+      $('status').className = 'error';
+      return;
+    }
+    const range = Number($('range').value), gap = Number($('gap').value);
+    if (!Number.isInteger(range) || range < 1 || range > 128 || !Number.isFinite(gap) || gap < 0 || gap > 5) {
+      $('status').textContent = 'Choose a range of 1–128 semitones and a gap of 0–5 seconds.';
+      $('status').className = 'error'; return;
+    }
+    const form = new FormData();
+    for (const file of files) form.append('samples', file, file.name);
+    form.append('semitones', String(range)); form.append('gap_seconds', String(gap));
+    form.append('start_note_index', $('note').value); form.append('start_octave', $('octave').value);
+    form.append('pitched', String($('pitch').checked)); form.append('normalize', String($('normalize').checked));
+    form.append('randomize', String($('randomize').checked)); form.append('dump_samples', String($('dump').checked));
+    form.append('slicex_markers', String($('slicex').checked));
+    $('generate').disabled = true; $('clear').disabled = true; $('progress').hidden = false;
+    $('progress').removeAttribute('value'); $('status').className = '';
+    $('status').textContent = remoteEngineConfigured
+      ? 'Sending samples over HTTPS to your Ubuntu audio service for processing…'
+      : 'Sending samples to the local Praat/Parselmouth service for processing…';
+    $('result').style.display = 'none';
+    try {
+      const response = await fetch(`${apiBase}/api/generate`, {method:'POST', body:form});
+      if (!response.ok) throw new Error(await response.text());
+      const blob = await response.blob(), isZip = response.headers.get('Content-Type')?.includes('zip');
+      if (resultUrl) URL.revokeObjectURL(resultUrl);
+      resultUrl = URL.createObjectURL(blob); $('preview').src = resultUrl; $('download').href = resultUrl;
+      $('download').download = isZip ? 'chromatic_with_pitched_samples.zip' : 'chromatic.wav';
+      $('download').textContent = isZip ? 'Download WAV and pitched samples' : 'Download chromatic.wav';
+      $('details').textContent = isZip ? 'The ZIP includes chromatic.wav and the individual pitched WAV samples.' : `${range} semitones · Praat/Parselmouth-generated WAV`;
+      $('result').style.display = 'block'; $('status').textContent = 'Done. Preview the result or download it.';
+    } catch (error) {
+      const service = remoteEngineConfigured
+        ? `the Ubuntu audio service at ${apiBase}`
+        : 'the local audio service at http://127.0.0.1:8765/';
+      $('status').textContent = `The request to ${service} failed. Check that the service is running and reachable. ${error?.message || ''}`;
+      $('status').className = 'error';
+    } finally {
+      $('progress').hidden = true; $('progress').setAttribute('value','0');
+      $('generate').disabled = !files.length || !engineReady; $('clear').disabled = !files.length;
+    }
+  });
+})();
+</script>
+</body>
+</html>
