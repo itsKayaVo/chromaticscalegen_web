@@ -85,7 +85,7 @@
       <label><input id="dump" type="checkbox"> Include individual pitched WAVs</label>
       <label><input id="slicex" type="checkbox"> Embed Slicex markers</label>
     </div>
-    <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine. SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player.</p>
+    <p id="processingNote" class="hint">Audio is processed locally using the original Praat/Parselmouth engine. In the SF2, the lowest and highest samples also cover keys outside the generated range, and SoundFont Player transposes them.</p>
   </section>
   <section class="card">
     <h2>Run</h2>
@@ -118,7 +118,7 @@
   $('processingNote').textContent = (remoteEngineConfigured
     ? 'Audio samples are sent over HTTPS to your configured Ubuntu server for processing.'
     : 'Audio is processed locally using the original Praat/Parselmouth engine.')
-    + ' SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player.';
+    + ' SF2 output can be loaded in FL Studio Mobile 4.10 or newer with SoundFont Player. The lowest and highest samples cover keys outside the generated range and transpose there.';
   if (remoteEngineConfigured) {
     $('footerNote').textContent = 'Audio processing is provided by the configured Ubuntu server.';
   }
@@ -191,7 +191,7 @@
         ? (sf2Requested ? 'Download chromatic WAV and SF2 ZIP' : 'Download WAV and pitched samples')
         : 'Download chromatic.wav';
       $('details').textContent = sf2Requested && isZip
-        ? 'The ZIP contains chromatic.wav and chromatic.sf2. In FL Studio Mobile 4.10+, add SoundFont Player and load the SF2 bank.'
+        ? 'The ZIP contains chromatic.wav and chromatic.sf2. Its lowest and highest samples cover keys outside the generated range and transpose there. In FL Studio Mobile 4.10+, add SoundFont Player and load the SF2 bank.'
         : isZip ? 'The ZIP includes chromatic.wav and the individual pitched WAV samples.' : `${range} semitones · Praat/Parselmouth-generated WAV`;
       $('result').style.display = 'block'; $('status').textContent = 'Done. Preview the result or download it.';
     } catch (error) {
