@@ -123,6 +123,31 @@
     $('footerNote').textContent = 'Audio processing is provided by the configured Ubuntu server.';
   }
   let files = [], resultUrl = null;
+  function requestGeneration(form, onUploadProgress, onDownloadProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${apiBase}/api/generate`);
+      xhr.responseType = 'blob';
+      xhr.upload.addEventListener('progress', event => {
+        if (event.lengthComputable) onUploadProgress(event.loaded, event.total);
+      });
+      xhr.upload.addEventListener('load', () => onUploadProgress(null, null));
+      xhr.addEventListener('progress', event => {
+        if (event.lengthComputable && event.total > 0) onDownloadProgress(event.loaded, event.total);
+      });
+      xhr.addEventListener('load', async () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve({blob: xhr.response, contentType: xhr.getResponseHeader('Content-Type') || ''});
+          return;
+        }
+        const message = xhr.response instanceof Blob ? await xhr.response.text() : xhr.statusText;
+        reject(new Error(message || `Audio service returned HTTP ${xhr.status}.`));
+      });
+      xhr.addEventListener('error', () => reject(new Error('The connection was interrupted. Keep this page open and try again.')));
+      xhr.addEventListener('abort', () => reject(new Error('The request was canceled. Keep this page open until the result finishes downloading.')));
+      xhr.send(form);
+    });
+  }
   noteNames.forEach((name, i) => $('note').add(new Option(name, String(i))));
   for (let octave = 1; octave <= 8; octave++) $('octave').add(new Option(String(octave), String(octave)));
   $('octave').value = '3';
@@ -172,15 +197,25 @@
     form.append('create_sf2', String(sf2Requested));
     form.append('slicex_markers', String($('slicex').checked));
     $('generate').disabled = true; $('clear').disabled = true; $('sf2').disabled = true; $('progress').hidden = false;
-    $('progress').removeAttribute('value'); $('status').className = '';
+    $('progress').value = 0; $('status').className = '';
     $('status').textContent = remoteEngineConfigured
-      ? 'Sending samples over HTTPS to your Ubuntu audio service for processing…'
-      : 'Sending samples to the local Praat/Parselmouth service for processing…';
+      ? 'Connecting to your Ubuntu audio service… Keep this page open until the result finishes downloading.'
+      : 'Connecting to the local Praat/Parselmouth service… Keep this page open until the result finishes downloading.';
     $('result').style.display = 'none';
     try {
-      const response = await fetch(`${apiBase}/api/generate`, {method:'POST', body:form});
-      if (!response.ok) throw new Error(await response.text());
-      const blob = await response.blob(), isZip = response.headers.get('Content-Type')?.includes('zip');
+      const {blob, contentType} = await requestGeneration(form, (loaded, total) => {
+        if (loaded === null) {
+          $('progress').removeAttribute('value');
+          $('status').textContent = 'Upload complete. The server is generating your audio and preparing the download. Keep this page open; this can take a few minutes.';
+        } else {
+          $('progress').value = Math.max(1, Math.round(loaded / total * 100));
+          $('status').textContent = `Uploading samples to the audio service: ${Math.round(loaded / total * 100)}%`;
+        }
+      }, (loaded, total) => {
+        $('progress').value = Math.max(1, Math.round(loaded / total * 100));
+        $('status').textContent = `Downloading your completed result: ${Math.round(loaded / total * 100)}%`;
+      });
+      const isZip = contentType.includes('zip');
       if (sf2Requested && !isZip) throw new Error('The audio service returned a WAV instead of the requested SF2 ZIP. Please try again; if it continues, the server may need its SF2 update.');
       if (resultUrl) URL.revokeObjectURL(resultUrl);
       resultUrl = URL.createObjectURL(blob); $('preview').src = isZip ? '' : resultUrl; $('preview').hidden = isZip; $('download').href = resultUrl;
